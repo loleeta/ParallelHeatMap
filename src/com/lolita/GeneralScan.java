@@ -8,180 +8,173 @@ import java.util.concurrent.RecursiveAction;
 /**
  * GeneralScan class is a class for a generalized reduce/scan operation on a
  * list of values. The element type and list it works on is passed in.
+ *
  * @param <ElemType>
  * @param <TallyType>
  */
-public class GeneralScan<ElemType, TallyType> {
-    private static int NUM_THREADS = 16;            //number of threads allowed
-    public static final int ROOT = 0;               //the root of the "tree"
-    private List<ElemType> data;                    //list of data
-    private List<TallyType> interior;               //intermediary nodes
-    private final ForkJoinPool pool;                //thread service
+public abstract class GeneralScan<ElemType, TallyType> {
+    public static final int ROOT_NODE_INDEX = 0; // the root of the "tree"
+    private List<ElemType> dataElements; // list of dataElements
+    private List<TallyType> interiorTallyNodes;               // intermediary nodes
+    private final ForkJoinPool pool;                // Thread service
 
-    private int size;                               //number of items
-    private boolean reduced;                        //whether list has reduction
-    private int firstData;                          //index of first data
-    private int threshold;                          //work of a thread
-
-    /**
-     * Constructor for GeneralScan
-     * @param data                  list of data
-     */
-    public GeneralScan(List<ElemType> data) {
-        this(data, NUM_THREADS);
-    }
+    private int dataSize;                               //number of items
+    private boolean isReduced;
+    private int indexFirstData;
+    private int threadForkThreshold;                          //work of a thread
 
     /**
      * Constructor for GeneralScan
-     * @param data                  list of data
-     * @param threadThreshold       work of a thread
+     *
+     * @param dataElements    list of dataElements
+     * @param threadThreshold work of a thread
      */
-    public GeneralScan(List<ElemType> data, int threadThreshold) {
-        this.reduced = false;
-        this.data = data;
-        this.size = data.size();
-        int height = (int)Math.ceil(Math.log(size)/Math.log(2));
-        if (1 << height != size)
-            throw new java.lang.RuntimeException("Data size must be power of 2");
+    public GeneralScan(List<ElemType> dataElements, int threadThreshold) {
+        this.isReduced = false;
+        this.dataElements = dataElements;
+        this.dataSize = dataElements.size();
+        int height = (int) Math.ceil(Math.log(dataSize) / Math.log(2));
+        if (1 << height != dataSize)
+            throw new java.lang.RuntimeException("Data dataSize must be power of 2");
 
         this.pool = new ForkJoinPool();
-        this.firstData = (1 << height) - 1;
-        this.threshold = threadThreshold;
+        this.indexFirstData = (1 << height) - 1;
+        this.threadForkThreshold = threadThreshold;
 
         //System.out.println("threadThreshold is " + threadThreshold);
-        //System.out.println("firstData is " + firstData);
-        int m = firstData/2; //only uses half the interior nodes
+        //System.out.println("indexFirstData is " + indexFirstData);
+        int m = indexFirstData / 2; //only uses half the interiorTallyNodes nodes
         //System.out.println("m is " + m);
-        this.interior = new ArrayList<>(m);
+        this.interiorTallyNodes = new ArrayList<>(m);
 
         for (int i = 0; i < m; i++)
-            interior.add(init());
+            interiorTallyNodes.add(init());
 
     }
 
     /**
      * Creates a thread pool to invoke a reduction of list which will result in
      * a TallyType object that is the reduction at the root
+     *
      * @return
      */
     public TallyType getReduction() {
-        if (!reduced) {
-            pool.invoke(new ComputeReduction(ROOT));
-            reduced = true;
+        if (!isReduced) {
+            pool.invoke(new ComputeReduction(ROOT_NODE_INDEX));
+            isReduced = true;
         }
-        return value(ROOT);
+        return getNodeTally(ROOT_NODE_INDEX);
     }
 
     /**
      * Creates thread pool to invoke scan of list which will result in
      * an array of values that every item has seen prior to itself
+     *
      * @return a list of TallyType objects
      */
     public List<TallyType> getScan() {
-        if (!reduced)
+        if (!isReduced)
             getReduction();
-        ArrayList<TallyType> output = new ArrayList<>(size);
-        for (int i = 0; i < data.size(); i++)
+        ArrayList<TallyType> output = new ArrayList<>(dataSize);
+        for (int i = 0; i < dataElements.size(); i++)
             output.add(init());
-        pool.invoke(new ComputeScan(ROOT, init(), output));
+        pool.invoke(new ComputeScan(ROOT_NODE_INDEX, init(), output));
         return output;
     }
 
     /**
      * Method for creating a blank TallyType object to be overridden in
      * child class
+     *
      * @return a new TallyType object
      */
-    protected TallyType init() {
-        throw new IllegalArgumentException("Should be overridden in child");
-    }
+    protected abstract TallyType init();
 
     /**
      * Method for combining values to be overridden in child class
+     *
      * @param left
      * @param right
      * @return a TallyType object
      */
-    protected TallyType combine(TallyType left, TallyType right) {
-        throw new IllegalArgumentException("Should be overridden in child");
-    }
+    protected abstract TallyType combine(TallyType left, TallyType right);
 
     /**
      * Method for creating a new TallyType object to be overridden in
      * child class
+     *
      * @param datum
      * @return a new TallyType object
      */
-    protected TallyType prepare(ElemType datum) {
-        throw new IllegalArgumentException("Should be overridden in child");
-    }
+    protected abstract TallyType prepare(ElemType datum);
 
     /**
      * Method for accumulating values to be overridden in child class
+     *
      * @param tally
      * @param datum
      */
-    protected void accum(TallyType tally, ElemType datum) {
-        throw new IllegalArgumentException("Should be overridden in child");
-    }
+    protected abstract void accum(TallyType tally, ElemType datum);
 
     /**
-     * Creates a TallyType object with the given value
-     * @param i                     the current node
+     * Creates a TallyType object with the given getNodeTally
+     *
+     * @param i the current node
      * @return a TallyType object
      */
-    private TallyType value(int i) {
+    private TallyType getNodeTally(int i) {
         TallyType t = init();
-        if (i < size-1) {
-            return interior.get(i);
+        if (i < dataSize - 1) {
+            return interiorTallyNodes.get(i);
         } else {
-            accum(t, data.get(i - (size-1)));
+            accum(t, dataElements.get(i - (dataSize - 1)));
             return t;
         }
     }
 
     /**
-     * Finds the size of the entire array where data is n and interior is n-1
-     * @return an integer representing size
+     * Finds the dataSize of the entire array where dataElements is n and interiorTallyNodes is n-1
+     *
+     * @return an integer representing dataSize
      */
-    private int size() { return (size-1) + size; }
-
-    /**
-     * Finds the parent of the given index
-     * @param i                     the current node
-     * @return an integer that is its parent node
-     */
-    private int parent(int i) { return (i-1)/2; }
+    private int size() {
+        return (dataSize - 1) + dataSize;
+    }
 
     /**
      * Finds the left child of the given index
-     * @param i                     the current node
+     *
+     * @param i the current node
      * @return an integer that is its left child
      */
-    private int left(int i) { return (i*2)+1; }
+    private int left(int i) {
+        return (i * 2) + 1;
+    }
 
     /**
      * Finds the right child of the given index
-     * @param i                     the current node
+     *
+     * @param i the current node
      * @return an integer that is its right child
      */
-    private int right(int i) { return (i*2) + 2; }
+    private int right(int i) {
+        return (i * 2) + 2;
+    }
 
     /**
      * Checks whether a given index is a leaf node
-     * @param i                     the current node
+     *
+     * @param i the current node
      * @return true if it is a leaf, false otherwise
      */
     private boolean isLeaf(int i) {
-        if(i >= size-1)
-            return true;
-        else
-            return false;
+        return i >= dataSize - 1;
     }
 
     /**
      * Checks whether node has a right child
-     * @param i                     the current node
+     *
+     * @param i the current node
      * @return true if it has a right child, false otherwise
      */
     private boolean hasRight(int i) {
@@ -189,24 +182,26 @@ public class GeneralScan<ElemType, TallyType> {
     }
 
     /**
-     * Finds the index of the first data item in (n-1)+n array where data is n
-     * @param i                     the current interior node
+     * Finds the index of the first dataElements item in (n-1)+n array where dataElements is n
+     *
+     * @param i the current interiorTallyNodes node
      * @return an intenger representing the index of the first leaf it has
      */
     private int firstData(int i) {
         if (isLeaf(i))
-            return i < firstData ? -1 : i;
+            return i < indexFirstData ? -1 : i;
         return firstData(left(i));
     }
 
     /**
-     * Finds the index of the last data item in (n-1)+n array where data is n
-     * @param i                     the current interior node
+     * Finds the index of the last dataElements item in (n-1)+n array where dataElements is n
+     *
+     * @param i the current interiorTallyNodes node
      * @return an intenger representing the index of the last leaf it has
      */
     private int lastData(int i) {
         if (isLeaf(i)) {
-            return i < firstData ? -1 : i;
+            return i < indexFirstData ? -1 : i;
         }
         if (hasRight(i)) {
             int right = lastData(right(i));
@@ -218,18 +213,20 @@ public class GeneralScan<ElemType, TallyType> {
 
     /**
      * Finds the number of leaf values that this node has access to
-     * @param i                     the current interior node
+     *
+     * @param i the current interiorTallyNodes node
      * @return an integer representing number of leaves it has
      */
     private int dataCount(int i) {
         //System.out.println("In dataCount(" + i + "): " + "lastData is " +
-        //              lastData(i) + " and firstData is " + firstData(i));
+        //              lastData(i) + " and indexFirstData is " + indexFirstData(i));
         return lastData(i) - firstData(i);
     }
 
     /**
      * Finds the total sum value of the collection so far
-     * @param i                     the current node
+     *
+     * @param i the current node
      */
     private void reduce(int i) {
         int first = firstData(i), last = lastData(i);
@@ -238,15 +235,16 @@ public class GeneralScan<ElemType, TallyType> {
         TallyType tally = init();
         if (first != -1)
             for (int j = first; j <= last; j++)
-                accum(tally, data.get(i));
-        interior.set(i, tally);
+                accum(tally, dataElements.get(i));
+        interiorTallyNodes.set(i, tally);
     }
 
     /**
      * Finds, for each item, what is the sum of every item so far.
-     * @param i                     current item
-     * @param tallyPrior            value from item to the left
-     * @param output                list to write scan value to
+     *
+     * @param i          current item
+     * @param tallyPrior getNodeTally from item to the left
+     * @param output     list to write scan getNodeTally to
      */
     private void scan(int i, TallyType tallyPrior, List<TallyType> output) {
         int first = firstData(i), last = lastData(i);
@@ -254,8 +252,8 @@ public class GeneralScan<ElemType, TallyType> {
         //                      first + " last is: " + last);
         if (first != -1)
             for (int j = first; j <= last; j++) {
-                tallyPrior = combine(tallyPrior, value(j));
-                output.set(j - firstData, tallyPrior);
+                tallyPrior = combine(tallyPrior, getNodeTally(j));
+                output.set(j - indexFirstData, tallyPrior);
             }
     }
 
@@ -267,26 +265,28 @@ public class GeneralScan<ElemType, TallyType> {
 
         /**
          * Constructor for the class
-         * @param i                         current index
+         *
+         * @param i current index
          */
-        public ComputeReduction(int i) { this.i = i; }
+        public ComputeReduction(int i) {
+            this.i = i;
+        }
 
         /**
-         * Recursively computes the sum value for each item in the array by
-         * forking and using tight loops to accumulate data into a Tally that
+         * Recursively computes the sum getNodeTally for each item in the array by
+         * forking and using tight loops to accumulate dataElements into a Tally that
          * is stored and sent up to parent.
          */
         public void compute() {
             if (!isLeaf(i)) {
                 //System.out.println("dataCount(" + i + "): " + dataCount(i));
-                if (dataCount(i) > threshold) { //if amount of work in this leaf is > threshold, fork
+                if (dataCount(i) > threadForkThreshold) { //if amount of work in this leaf is > threadForkThreshold, fo
                     //System.out.println("ComputeReduce: calling invokeAll on " + i + " left: "
                     //                      + left(i) + " right: " + right(i));
                     invokeAll(new ComputeReduction(left(i)), new ComputeReduction(right(i)));
-                    interior.set(i, combine(value(left(i)), value(right(i)))); //set value from left and right child
-                }
-                else
-                    reduce(i); //accum leaves for this node and set its value in the interior node
+                    interiorTallyNodes.set(i, combine(getNodeTally(left(i)), getNodeTally(right(i)))); //set getNodeTally from left and right child
+                } else
+                    reduce(i); //accum leaves for this node and set its getNodeTally in the interiorTallyNodes node
             }
         }
     }
@@ -301,9 +301,10 @@ public class GeneralScan<ElemType, TallyType> {
 
         /**
          * Constructor for ComputeScan
-         * @param i                         the current index/node
-         * @param tallyPrior                the previous Tally
-         * @param output                    array of Scan values so far
+         *
+         * @param i          the current index/node
+         * @param tallyPrior the previous Tally
+         * @param output     array of Scan values so far
          */
         public ComputeScan(int i, TallyType tallyPrior, List<TallyType> output) {
             this.i = i;
@@ -312,23 +313,19 @@ public class GeneralScan<ElemType, TallyType> {
         }
 
         /**
-         * Recursively calculates the scan value for each item in the array by
+         * Recursively calculates the scan getNodeTally for each item in the array by
          * forking and using tight loops to do scan.
-         *
          */
         public void compute() {
             if (isLeaf(i)) {
                 System.out.println("Setting output(" + i + ")");
-                output.set(i - (size-1), combine(tallyPrior, value(i)));
-            }
-            else {
-                if (dataCount(i) > threshold) { //if amount of leaves > threshold, fork
+                output.set(i - (dataSize - 1), combine(tallyPrior, getNodeTally(i)));
+            } else {
+                if (dataCount(i) > threadForkThreshold) { //if amount of leaves > threadForkThreshold, fork
                     //System.out.println("datacount(" + i + "):" + dataCount(i) +
-                    //                      " is less than threshold: " + threshold);
-                    invokeAll(new ComputeScan(left(i), tallyPrior, output),
-                            new ComputeScan(right(i), combine(tallyPrior, value(left(i))), output));
-                }
-                else
+                    //                      " is less than threadForkThreshold: " + threadForkThreshold);
+                    invokeAll(new ComputeScan(left(i), tallyPrior, output), new ComputeScan(right(i), combine(tallyPrior, getNodeTally(left(i))), output));
+                } else
                     scan(i, tallyPrior, output);
             }
         }
