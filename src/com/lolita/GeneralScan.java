@@ -7,37 +7,43 @@ import java.util.concurrent.RecursiveAction;
 
 public class GeneralScan<ElemType, TallyType> {
     private static int NUM_THREADS = 16;
-    private int ROOT = 0;
+    public static final int DEFAULT_THRESHOLD = 4;
+    public static final int ROOT = 0;
     private List<ElemType> data;
     private List<TallyType> interior;
+    private final ForkJoinPool pool;
+
     private int n;
     private boolean reduced;
-    private int height;
-    private final ForkJoinPool pool;
-    private int first;
+    private int firstData;
+    private int threshold;
 
     public GeneralScan(List<ElemType> data) {
         this(data, NUM_THREADS);
     }
 
-    public GeneralScan(List<ElemType> data, int threads) {
+    public GeneralScan(List<ElemType> data, int threadThreshold) {
         this.reduced = false;
         this.data = data;
         this.n = data.size();
-        this.height = (int) Math.ceil(Math.log(n)/Math.log(2));
-        this.NUM_THREADS = threads;
-
+        int height = (int)Math.ceil(Math.log(n)/Math.log(2));
         if (1 << height != n)
             throw new java.lang.RuntimeException("Data size must be power of 2");
 
         this.pool = new ForkJoinPool();
-        this.first = (1 << height) - 1;
+        this.firstData = (1 << height) - 1;
+        this.threshold = threadThreshold;
 
-        int m = 4 * (1 + first/threads);
-        this.interior = new ArrayList<TallyType>(m);
+        //System.out.println("threadThreshold is " + threadThreshold);
+        System.out.println("firstData is " + firstData);
+        //int m = 4 * (1 + firstData/threshold);
+        int m = firstData/2;
+        System.out.println("m is " + m);
+        this.interior = new ArrayList<>(m);
 
         for (int i = 0; i < m; i++)
             interior.add(init());
+
     }
 
     public TallyType getReduction() {
@@ -55,7 +61,6 @@ public class GeneralScan<ElemType, TallyType> {
         for (int i = 0; i < data.size(); i++)
             output.add(init());
         pool.invoke(new ComputeScan(ROOT, init(), output));
-        //scan(ROOT, init(), output);
         return output;
     }
 
@@ -104,43 +109,44 @@ public class GeneralScan<ElemType, TallyType> {
         return right(i) < size();
     }
 
+    //returns index of the first piece of data in (n-1)+n array where data is in n
     private int firstData(int i) {
         if (isLeaf(i))
-            return i < first ? -1 : i;
+            return i < firstData ? -1 : i;
         return firstData(left(i));
     }
 
+    //returns index of last piece of data in (n-1)+n arra where data is in n
     private int lastData(int i) {
         if (isLeaf(i)) {
-            if (i < first)
-                System.out.println("lastData(" + i + ") returning leaf: " + "-1");
-            else
-                System.out.println("lastData(" + i + ") returning non-leaf: " + i);
-            return i < first ? -1 : i;
+            //if (i < firstData)
+                //System.out.println("lastData(" + i + ") returning leaf: " + "-1");
+            //else
+                //System.out.println("lastData(" + i + ") returning non-leaf: " + i);
+            return i < firstData ? -1 : i;
         }
         if (hasRight(i)) {
             int right = lastData(right(i));
-            if (right != -1) {
-                System.out.println("lastData(" + i + ") returning right: " + right);
+            if (right != -1)
                 return right;
-            }
         }
-        System.out.println("lastData(" + i + ") returning left: " + i);
         return lastData(left(i));
     }
 
     private int dataCount(int i) {
+        System.out.println("In dataCount(" + i + "): " + "lastData is " + lastData(i) + " and firstData is " + firstData(i));
         return lastData(i) - firstData(i);
     }
 
     //what is the total sum of the collection
-    private boolean reduce(int i) {
-        if (!isLeaf(i)) {
-            reduce(left(i));
-            reduce(right(i));
-            interior.set(i, combine(value(left(i)), value(right(i))));
-        }
-        return true;
+    private void reduce(int i) {
+        int first = firstData(i), last = lastData(i);
+        System.out.println("In REDUCE(" + i + "): " + "first is: " + first + " last is: " + last);
+        TallyType tally = init();
+        if (first != -1)
+            for (int j = first; j <= last; j++)
+                accum(tally, data.get(i));
+        interior.set(i, tally);
     }
 
     //for each item, what is the sum of every item seen so far
@@ -157,16 +163,18 @@ public class GeneralScan<ElemType, TallyType> {
     class ComputeReduction extends RecursiveAction {
         private int i;
 
-        public ComputeReduction(int i) {
-            this.i = i;
-        }
+        public ComputeReduction(int i) { this.i = i; }
+
         public void compute() {
             if (!isLeaf(i)) {
-                if (i < NUM_THREADS-2)
+                //System.out.println("dataCount(" + i + "): " + dataCount(i));
+                if (dataCount(i) > threshold) {
+                    //System.out.println("ComputeReduce: calling invokeAll on notLeaf(" + i + ") left: " + left(i) + " right: " + right(i));
                     invokeAll(new ComputeReduction(left(i)), new ComputeReduction(right(i)));
+                    interior.set(i, combine(value(left(i)), value(right(i)))); //set value from left and right child
+                }
                 else
-                    reduce(i);
-                interior.set(i, combine(value(left(i)), value(right(i))));
+                    reduce(i); //accum leaves for this node and set its value in the interior node
             }
         }
     }
@@ -181,19 +189,21 @@ public class GeneralScan<ElemType, TallyType> {
             this.i = i;
             this.tallyPrior = tallyPrior;
             this.output = output;
-            System.out.println("ComputeScan is being called");
         }
 
         public void compute() {
-            if (isLeaf(i))
-                output.set(i - (n-1), combine(tallyPrior, value(i)));
+            if (isLeaf(i)) {
+                System.out.println("Setting output(" + i + ")");
+                output.set(i - (n - 1), combine(tallyPrior, value(i)));
+            }
             else {
-                if (i < NUM_THREADS-2)
+                if (dataCount(i) >= threshold) {
+                    System.out.println("datacount(" + i + "):" + dataCount(i) + " is less than threshold: " + threshold);
                     invokeAll(new ComputeScan(left(i), tallyPrior, output),
                             new ComputeScan(right(i), combine(tallyPrior, value(left(i))), output));
-                else {
-                    scan(i, tallyPrior, output);
                 }
+                else
+                    scan(i, tallyPrior, output);
             }
         }
     }
