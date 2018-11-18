@@ -80,4 +80,3 @@ class SumScan extends GeneralScan<Double, DoubleTally> {
         tally.value += datum;
     }
 }
-

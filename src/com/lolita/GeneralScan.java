@@ -15,13 +15,13 @@ import java.util.concurrent.RecursiveAction;
 public abstract class GeneralScan<ElemType, TallyType> {
     public static final int ROOT_NODE_INDEX = 0; // the root of the "tree"
     private List<ElemType> dataElements; // list of dataElements
-    private List<TallyType> interiorTallyNodes;               // intermediary nodes
-    private final ForkJoinPool pool;                // Thread service
+    private List<TallyType> interiorTallyNodes; // intermediary nodes
+    private final ForkJoinPool pool; // thread service
 
-    private int dataSize;                               //number of items
+    private int dataSize; // number of items
     private boolean isReduced;
     private int indexFirstData;
-    private int threadForkThreshold;                          //work of a thread
+    private int threadForkThreshold; //work of a thread
 
     /**
      * Constructor for GeneralScan
@@ -34,8 +34,9 @@ public abstract class GeneralScan<ElemType, TallyType> {
         this.dataElements = dataElements;
         this.dataSize = dataElements.size();
         int height = (int) Math.ceil(Math.log(dataSize) / Math.log(2));
-        if (1 << height != dataSize)
-            throw new java.lang.RuntimeException("Data dataSize must be power of 2");
+        //if (1 << height != dataSize)
+        //   throw new java.lang.RuntimeException("Data dataSize must be " +
+        //        "power of 2");
 
         this.pool = new ForkJoinPool();
         this.indexFirstData = (1 << height) - 1;
@@ -133,7 +134,8 @@ public abstract class GeneralScan<ElemType, TallyType> {
     }
 
     /**
-     * Finds the dataSize of the entire array where dataElements is n and interiorTallyNodes is n-1
+     * Finds the dataSize of the entire array where dataElements is n and
+     * interiorTallyNodes is n-1
      *
      * @return an integer representing dataSize
      */
@@ -219,7 +221,7 @@ public abstract class GeneralScan<ElemType, TallyType> {
      */
     private int dataCount(int i) {
         //System.out.println("In dataCount(" + i + "): " + "lastData is " +
-        //              lastData(i) + " and indexFirstData is " + indexFirstData(i));
+        //        lastData(i) + " and indexFirstData is " + indexFirstData(i));
         return lastData(i) - firstData(i);
     }
 
@@ -261,7 +263,7 @@ public abstract class GeneralScan<ElemType, TallyType> {
      * Subclass that uses thread pool to thread reducing of list of Tallys
      */
     class ComputeReduction extends RecursiveAction {
-        private int i;                      //current index of the array
+        private int i; //current index of the array
 
         /**
          * Constructor for the class
@@ -318,15 +320,18 @@ public abstract class GeneralScan<ElemType, TallyType> {
          */
         public void compute() {
             if (isLeaf(i)) {
-                System.out.println("Setting output(" + i + ")");
+                //System.out.println("Setting output(" + i + ")");
                 output.set(i - (dataSize - 1), combine(tallyPrior, getNodeTally(i)));
             } else {
                 if (dataCount(i) > threadForkThreshold) { //if amount of leaves > threadForkThreshold, fork
                     //System.out.println("datacount(" + i + "):" + dataCount(i) +
                     //                      " is less than threadForkThreshold: " + threadForkThreshold);
-                    invokeAll(new ComputeScan(left(i), tallyPrior, output), new ComputeScan(right(i), combine(tallyPrior, getNodeTally(left(i))), output));
-                } else
+                    invokeAll(new ComputeScan(left(i), tallyPrior, output),
+                              new ComputeScan(right(i), combine(tallyPrior,
+                                     getNodeTally(left(i))), output));
+                } else {
                     scan(i, tallyPrior, output);
+                }
             }
         }
     }
