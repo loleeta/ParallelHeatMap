@@ -23,12 +23,16 @@ public class SomeData {
         try {
             ObjectOutputStream out = new ObjectOutputStream(new FileOutputStream(FILENAME));
             int t = 0;
+            int count = 0;
             for (double r = -0.95; r <= 0.95; r += 0.1) {
                 t++; // each row has the same value of t so we can see differences in step 7
-                for (double c = -0.95; c <= 0.95; c += 0.1)
+                for (double c = -0.95; c <= 0.95; c += 0.1) {
+                    count++;
                     out.writeObject(new Observation(t, c, r));
+                }
             }
             out.writeObject(new Observation());  // to mark EOF
+            System.out.println("Count is " + count);
             out.close();
         } catch (IOException e) {
             System.out.println("writing to " + FILENAME + "failed: " + e);
@@ -38,8 +42,4 @@ public class SomeData {
         System.out.println("wrote " + FILENAME);
 
     }
-
-
-
-
 }
