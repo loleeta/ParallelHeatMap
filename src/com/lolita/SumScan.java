@@ -32,8 +32,9 @@ class SumScan extends GeneralScan<Double, DoubleTally> {
      * @param raw             data that is passed in
      * @param threadThreshold amount of work per thread
      */
-    public SumScan(List<Double> raw, int threadThreshold) {
-        super(raw, threadThreshold);
+    public SumScan(List<Double> raw, int threadThreshold, int num) {
+        super(raw, threadThreshold, num);
+        //need to change this back
     }
 
     /**

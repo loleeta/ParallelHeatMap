@@ -26,7 +26,8 @@ import java.util.concurrent.RecursiveAction;
 public class GeneralScan<ElemType, TallyType> {
     public static final int DEFAULT_THREAD_THRESHOLD = 10_000;
 
-    public GeneralScan(List<ElemType> raw, int thread_threshold) {
+    public GeneralScan(List<ElemType> raw, int thread_threshold, int
+            numObservations) {
         reduced = false;
         n = raw.size();
         data = raw;
@@ -40,6 +41,7 @@ public class GeneralScan<ElemType, TallyType> {
         for (int i = 0; i < m; i++)
             interior.add(init());
         pool = new ForkJoinPool();
+        this.numObservations = numObservations;
     }
 
     TallyType getReduction() {
@@ -87,6 +89,7 @@ public class GeneralScan<ElemType, TallyType> {
     protected int first_data;
     protected ForkJoinPool pool;
     protected int threshold;
+    protected int numObservations;
 
     protected int size() {
         return first_data + n;
@@ -103,10 +106,6 @@ public class GeneralScan<ElemType, TallyType> {
         if (i < first_data || i >= size())
             throw new IllegalArgumentException("bad i " + i);
         return data.get(i - first_data);
-    }
-
-    protected int parent(int i) {
-        return (i - 1) / 2;
     }
 
     protected int left(int i) {
@@ -150,10 +149,11 @@ public class GeneralScan<ElemType, TallyType> {
         int first = firstData(i), last = lastData(i);
         //System.out.println("reduce(" + i + ") from " + first + " to " + last);
         TallyType tally = init();
-        if (first != -1)
+        if (first != -1) {
             for (int j = first; j <= last; j++)
                 accum(tally, leafValue(j));
-        interior.set(i, tally);
+            interior.set(i, tally);
+        }
     }
 
     protected void scan(int i, TallyType tallyPrior, List<TallyType> output) {
@@ -161,7 +161,10 @@ public class GeneralScan<ElemType, TallyType> {
         if (first != -1)
             for (int j = first; j <= last; j++) {
                 tallyPrior = combine(tallyPrior, value(j));
-                output.set(j - first_data, tallyPrior);
+                if ((j-first_data) % numObservations == 0 && (j-first_data)
+                        /numObservations < data.size()/numObservations) {
+                    output.set((j - first_data) / numObservations, tallyPrior);
+                }
             }
     }
 

@@ -7,6 +7,8 @@ import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.ObjectInputStream;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
 
 public class HeatMapTest {
@@ -19,18 +21,37 @@ public class HeatMapTest {
     static private final Color COLD = new Color(0x0a, 0x37, 0x66), HOT = Color.RED;
     static private int offset = 0;
     private static int current;
+    private static int NUM_OBSERVATIONS = 10; //to do a scan of at a time
 
     private static List<ObservationTally> scanResults;
+    private static List<ObsTally> scanResults2;
 
-    public static void main(String[] args) throws FileNotFoundException, InterruptedException {
+    public static void main(String[] args) throws InterruptedException {
         // Read in observations from file
         final String FILENAME = "obs_uniform_spray.dat";
         ArrayList<Observation> observations = readDataFromFile(FILENAME);
 
         // Tally up observations
-        HeatMapScan testReduce = new HeatMapScan(observations,
-                THREAD_THRESHOLD);
-        scanResults = testReduce.getScan();
+        /*HeatMapScan testReduce = new HeatMapScan(observations,
+                THREAD_THRESHOLD, NUM_OBSERVATIONS);
+        scanResults = testReduce.getScan();*/
+
+        HeatMapScan2 testScan = new HeatMapScan2(observations,
+                THREAD_THRESHOLD, NUM_OBSERVATIONS);
+        ObsTally reduceResults = testScan.getReduction();
+        System.out.println("ObsTally: \n" + reduceResults);
+
+
+        /*
+        System.out.println("scanResults2.size: " + scanResults2.size());
+        for (int i = 0; i < scanResults2.size(); i++) {
+            for (int j = 0; j < scanResults2.get(i).heatmap.size(); j++) {
+                System.out.println("i is " + i + " and the size of the " +
+                        "heatmap is " + j);
+            }
+        }*/
+
+        //printToGrid(scanResults2);
 
         // Print out scan
         /*
@@ -39,9 +60,34 @@ public class HeatMapTest {
                     .get(i));
         }
         */
-        System.out.println(scanResults.size());
+        //System.out.println(scanResults.size());
         current = 0;
 
+        // Print scan results to heat map
+        //printToGrid(scanResults);
+    }
+
+    private static ArrayList<Observation> readDataFromFile(String fileName) {
+        ArrayList<Observation> data = new ArrayList<>();
+        try {
+            ObjectInputStream in = new ObjectInputStream(new FileInputStream(fileName));
+            Observation obs = (Observation) in.readObject();
+            while (!obs.isEOF()) {
+                obs = (Observation) in.readObject();
+                if (!obs.isEOF())
+                    data.add(obs);
+            }
+            in.close();
+        } catch (IOException | ClassNotFoundException e) {
+            System.out.println("reading from " + fileName + "failed: " + e);
+            e.printStackTrace();
+            System.exit(1);
+        }
+        return data;
+    }
+
+    private static void printToGrid(List<ObsTally> scanResults2) throws
+            InterruptedException {
         grid = new Color[DIM][DIM];
         application = new JFrame();
         application.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
@@ -54,35 +100,16 @@ public class HeatMapTest {
         button.addActionListener(new CGDemo.BHandler());
         application.add(button, BorderLayout.PAGE_END);
 
-        application.setSize(DIM * 25, (int)(DIM * 25));
+        application.setSize(DIM * 30, (int)(DIM * 30));
         application.setVisible(true);
         application.repaint();
         animate();
-
-    }
-
-    private static ArrayList<Observation> readDataFromFile(String fileName) {
-        ArrayList<Observation> data = new ArrayList<>();
-        try {
-            ObjectInputStream in = new ObjectInputStream(new FileInputStream(fileName));
-            Observation obs = (Observation) in.readObject();
-            while (!obs.isEOF()) {
-                obs = (Observation) in.readObject();
-                data.add(obs);
-            }
-            in.close();
-        } catch (IOException | ClassNotFoundException e) {
-            System.out.println("reading from " + fileName + "failed: " + e);
-            e.printStackTrace();
-            System.exit(1);
-        }
-        return data;
     }
 
 
     private static void animate() throws InterruptedException {
         button.setEnabled(false);
-        for (int i = 0; i < scanResults.size(); i++) {
+        for (int i = 0; i < scanResults2.size(); i++) {
             fillGrid(grid);
             current++;
             application.repaint();
@@ -96,8 +123,11 @@ public class HeatMapTest {
     private static void fillGrid(Color[][] grid) {
         for (int r = 0; r < grid.length; r++) {
             for (int c = 0; c < grid[r].length; c++) {
-                grid[r][c] = interpolateColor(scanResults.get(current)
-                        .getCell(r, c), COLD, HOT);
+
+
+                //grid[r][c] = interpolateColor(
+                 //       scanResults2.get(current).heatmap.get(current)
+                 //       .getCell(1.0, r, c), COLD, HOT);
             }
         }
     }
