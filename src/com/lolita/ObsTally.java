@@ -3,6 +3,7 @@ package com.lolita;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 class ObsTally {
     public HashMap<Long, int[]> heatmap;
