@@ -90,9 +90,8 @@ class ObsTally {
  */
 class HeatMapScan2 extends GeneralScan<Observation, ObsTally> {
 
-    public HeatMapScan2(List<Observation> raw, int threshold, int
-            numObservations) {
-        super(raw, threshold, numObservations);
+    public HeatMapScan2(List<Observation> raw, int threshold) {
+        super(raw, threshold);
     }
 
     @Override

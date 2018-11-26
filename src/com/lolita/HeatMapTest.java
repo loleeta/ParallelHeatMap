@@ -18,66 +18,38 @@ import javax.swing.JButton;
 import javax.swing.JFrame;
 
 public class HeatMapTest {
-    public static final int THREAD_THRESHOLD = 15;
+    public static final int THREAD_THRESHOLD = 20;
     private static final int DIM = 20;
     private static final String REPLAY = "Replay";
     private static JFrame application;
     private static JButton button;
     private static Color[][] grid;
-    static private final Color COLD = new Color(0x0a, 0x37, 0x66), HOT = Color.RED;
+    static private final Color COLD = new Color(0x20, 0xB2, 0xAA), HOT = new
+            Color(0xDC, 0x14, 0x3C);
     private static Long current;
-    private static int NUM_OBSERVATIONS = 0; //to do a scan of at a time
     public static Map<Long, int[]> finalHeatMap = new HashMap<>();
     public static ObsTally reduceResults;
 
-    private static List<ObservationTally> scanResults;
-    private static List<ObsTally> scanResults2;
 
     public static void main(String[] args) throws InterruptedException {
         // Read in observations from file
         final String FILENAME = "obs_uniform_spray.dat";
         ArrayList<Observation> observations = readDataFromFile(FILENAME);
 
-        // Tally up observations
-        /*HeatMapScan testReduce = new HeatMapScan(observations,
-                THREAD_THRESHOLD, NUM_OBSERVATIONS);
-        scanResults = testReduce.getScan();*/
-
-        // Print observations
-
         //Reduces observations by timestamp
         HeatMapScan2 testScan = new HeatMapScan2(observations,
-                THREAD_THRESHOLD, NUM_OBSERVATIONS);
+                THREAD_THRESHOLD);
         reduceResults = testScan.getReduction();
 
-        //Print out last tally
-        //System.out.println("ObsTally: \n" + reduceResults);
-
-        /* prints results of reduce
-        for (Long i = 1L; i <= reduceResults.heatmap.size(); i++) {
-            System.out.println(i + ": " + Arrays.toString(reduceResults.heatmap
-                    .get
-                    (i)));
-        } */
-
-        ExecutorService threads = Executors.newCachedThreadPool();
-        current = 1L;
-
         //Call parallel scan on each time stamp
+        ExecutorService threads = Executors.newCachedThreadPool();
+
         for (Long i = 1L; i <= reduceResults.heatmap.size(); i++) {
-            threads.execute(new ParallelScan(reduceResults, i));
+            threads.execute(new ParallelScan(reduceResults, i, finalHeatMap));
         }
 
-        System.out.println("Scan finished. Printing scan results.");
-
-        /*
-        for (Map.Entry<Long, int[]> entry: finalHeatMap.entrySet()) {
-            Long currTime = entry.getKey();
-            int[] currCells = entry.getValue();
-            System.out.println(currTime + ": " + Arrays.toString(currCells));
-        }*/
-
-
+        //Print results of parallel scan to grid
+        current = 1L;
         printToGrid();
     }
 
@@ -117,8 +89,7 @@ public class HeatMapTest {
         }
     }
 
-    private static void printToGrid() throws
-            InterruptedException {
+    private static void printToGrid() throws InterruptedException {
         grid = new Color[DIM][DIM];
         application = new JFrame();
         application.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
@@ -131,7 +102,7 @@ public class HeatMapTest {
         button.addActionListener(new BHandler());
         application.add(button, BorderLayout.PAGE_END);
 
-        application.setSize(DIM * DIM, DIM * DIM);
+        application.setSize(DIM * 50, DIM * 50);
         application.setVisible(true);
         application.repaint();
         animate();
@@ -140,11 +111,11 @@ public class HeatMapTest {
 
     private static void animate() throws InterruptedException {
         button.setEnabled(false);
-        for (int i = 0; i < scanResults2.size(); i++) {
+        for (int i = 0; i < finalHeatMap.size(); i++) {
             fillGrid(grid);
             current++;
             application.repaint();
-            Thread.sleep(50); //25 for faster
+            Thread.sleep(200);
         }
         button.setEnabled(true);
         application.repaint();
@@ -153,26 +124,25 @@ public class HeatMapTest {
     private static void fillGrid(Color[][] grid) {
         for (int r = 0; r < grid.length; r++) {
             for (int c = 0; c < grid[r].length; c++) {
-                int [] cells = finalHeatMap.get(current);
-                //System.out.println("r*DIM*c: " + r*DIM*c);
-                grid[r][c] = interpolateColor(cells[r*DIM*c], COLD, HOT);
+                int[] cells = finalHeatMap.get(current);
+                grid[r][c] = interpolateColor(cells[r * DIM + c], COLD, HOT);
             }
         }
     }
 
     private static Color interpolateColor(double ratio, Color a, Color b) {
-        if (ratio >= -1.0) {
-            ratio = 1.0;
-        }
-        else if (ratio >= 0.5) {
-            ratio = 0.75;
-        }
-        else if (ratio > 0) {
-            ratio = 0.25;
-        }
-        else {
+        if (ratio == 4.0) {
+            ratio = 1;
+        } else if (ratio == 3.0) {
+            ratio = .75;
+        } else if (ratio == 2.0) {
+            ratio = .5;
+        } else if (ratio == 1.0) {
+            ratio = .25;
+        } else {
             ratio = 0;
         }
+
         int ax = a.getRed();
         int ay = a.getGreen();
         int az = a.getBlue();
@@ -182,42 +152,4 @@ public class HeatMapTest {
         return new Color(cx, cy, cz);
     }
 
-    /**
-     *
-     */
-    static class ParallelScan implements Runnable {
-        public Long time;
-        Map<Long, int[]> heatmap;
-        public int [] cells;
-
-        public ParallelScan(ObsTally tally, Long time) {
-            this.time = time;
-            this.cells = tally.heatmap.get(time);
-            this.heatmap = tally.heatmap;
-        }
-
-        @Override
-        public void run() {
-            Long minute = time - 3;
-            if (minute <= 0) {
-                minute = 1L;
-            }
-
-            int counter = 1;
-            for (Long i = this.time; i > minute; i--) {
-                weight(this.heatmap.get(i), counter);
-                counter++;
-            }
-            finalHeatMap.put(time, cells);
-        }
-
-        private void weight(int[] observations, int weight) {
-            for (int i = 0; i < observations.length; i++) {
-                cells[i] += observations[i]/weight;
-            }
-        }
-    }
-
 }
-
-

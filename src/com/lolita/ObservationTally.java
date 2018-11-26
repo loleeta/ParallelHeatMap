@@ -166,11 +166,9 @@ class HeatMapScan extends GeneralScan<Observation, ObservationTally> {
      * Constructor.
      * @param raw A List of data
      * @param threshold
-     * @param numObservations
      */
-    public HeatMapScan(List<Observation> raw, int threshold, int
-            numObservations) {
-        super(raw, threshold, numObservations);
+    public HeatMapScan(List<Observation> raw, int threshold) {
+        super(raw, threshold);
     }
 
     /**
