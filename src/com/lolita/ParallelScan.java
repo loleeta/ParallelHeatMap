@@ -4,15 +4,21 @@ import java.util.Arrays;
 import java.util.Map;
 
 /**
- *
+ * HW6: Threaded task to accumulate time decay for heatmap.
  */
 class ParallelScan implements Runnable {
-    public Long time;
-    Map<Long, int[]> heatmap;
-    public int [] cells;
-    public int decay;
-    public Map<Long, int[]> finalHeatMap;
+    public Long time;   // Timestamp
+    Map<Long, int[]> heatmap;   // Map of k,v = Time, Observations
+    public int [] cells;    // Array of Observations
+    public int decay;   // How far back the timestamps to look at
+    public Map<Long, int[]> finalHeatMap;   // Map of final results
 
+    /**
+     * Constructor for this Task.
+     * @param tally Tally from reduction
+     * @param time  Timestamp of this task
+     * @param finalHeatMap  HashMap to store results
+     */
     public ParallelScan(ObsTally tally, Long time, Map<Long, int[]>
             finalHeatMap) {
         this.time = time;
@@ -22,6 +28,10 @@ class ParallelScan implements Runnable {
         this.finalHeatMap = finalHeatMap;
     }
 
+    /**
+     * Per time stamp, takes the array of observations, and incorporates
+     * previous time stamps by using a decay (3 s).
+     */
     @Override
     public void run() {
         //first copy into a new array that will have the decay
@@ -60,9 +70,14 @@ class ParallelScan implements Runnable {
                 newCells[i] += cellsBackThree[i] == 1? 1:0;
             }
         }
-        finalHeatMap.put(time, newCells);
+
+        finalHeatMap.put(time, newCells); //output decayed cells
     }
 
+    /** Deep copy of array.
+     * @param src
+     * @return
+     */
     private int[] copyObservations(int[] src) {
         int [] dest = new int[src.length];
         System.arraycopy(src, 0, dest, 0, src.length);

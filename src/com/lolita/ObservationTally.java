@@ -6,6 +6,7 @@ import java.util.List;
 /**
  * ObservationTally is a wrapper for an integer array that represents the
  * observations seen.
+ * HW5
  */
 class ObservationTally {
     private static final int DIM = 20; // Dimension of heat map

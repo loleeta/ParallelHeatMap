@@ -1,58 +1,62 @@
 package com.lolita;
 
+import javax.swing.*;
 import java.awt.event.ActionListener;
+import java.awt.BorderLayout;
+import java.awt.Color;
+import java.awt.event.ActionEvent;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.ObjectInputStream;
 import java.util.*;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.awt.BorderLayout;
-import java.awt.Color;
-import java.awt.event.ActionEvent;
+import java.util.concurrent.*;
 import java.util.HashMap;
-import java.util.Map;
 
-
-import javax.swing.JButton;
-import javax.swing.JFrame;
-
+/**
+ * Two-pass parallelization of heat map. First reduces observations to be
+ * grouped by time stamp. Then, performs a scan in parallel to create a
+ * decayed final heat map.
+ */
 public class HeatMapTest {
-    public static final int THREAD_THRESHOLD = 20;
-    private static final int DIM = 20;
-    private static final String REPLAY = "Replay";
-    private static JFrame application;
-    private static JButton button;
-    private static Color[][] grid;
-    static private final Color COLD = new Color(0x20, 0xB2, 0xAA), HOT = new
-            Color(0xDC, 0x14, 0x3C);
-    private static Long current;
-    public static Map<Long, int[]> finalHeatMap = new HashMap<>();
-    public static ObsTally reduceResults;
-
+    public static final int THREAD_THRESHOLD = 20; // Number of threads used
+    private static final int DIM = 20;  // Dimension of grid
+    private static JFrame application;  // GUI
+    private static JButton button;  // Button on GUI
+    private static final String REPLAY = "Replay"; // Action for button
+    private static Color[][] grid; // 2D grid to be displayed
+    private static final Color COLD = new Color(0x20, 0xB2, 0xAA),
+            HOT = new Color(0xDC, 0x14, 0x3C); // Color codes
+    private static Long current; // Index of current timestamp
+    public static ObsTally reduceResults; // Reduced observation results
+    public static Map<Long, int[]> finalHeatMap =
+            new HashMap<>(); // Scanned observation results
 
     public static void main(String[] args) throws InterruptedException {
         // Read in observations from file
         final String FILENAME = "obs_uniform_spray.dat";
         ArrayList<Observation> observations = readDataFromFile(FILENAME);
 
-        //Reduces observations by timestamp
+        // Reduces observations by timestamp
         HeatMapScan2 testScan = new HeatMapScan2(observations,
                 THREAD_THRESHOLD);
         reduceResults = testScan.getReduction();
 
-        //Call parallel scan on each time stamp
+        // Call parallel scan on each time stamp to get decayed data series
         ExecutorService threads = Executors.newCachedThreadPool();
-
         for (Long i = 1L; i <= reduceResults.heatmap.size(); i++) {
             threads.execute(new ParallelScan(reduceResults, i, finalHeatMap));
         }
 
-        //Print results of parallel scan to grid
+        // Print results of parallel scan to grid
         current = 1L;
         printToGrid();
     }
 
+    /**
+     * Reads Observations from file into an array.
+     * @param fileName
+     * @return list of Observations
+     */
     private static ArrayList<Observation> readDataFromFile(String fileName) {
         ArrayList<Observation> data = new ArrayList<>();
         try {
@@ -72,6 +76,9 @@ public class HeatMapTest {
         return data;
     }
 
+    /**
+     * Event handler for printing the grid.
+     */
     static class BHandler implements ActionListener {
         public void actionPerformed(ActionEvent e) {
             if (REPLAY.equals(e.getActionCommand())) {
@@ -89,6 +96,10 @@ public class HeatMapTest {
         }
     }
 
+    /**
+     * Creates a new grid to be printed with scan results.
+     * @throws InterruptedException
+     */
     private static void printToGrid() throws InterruptedException {
         grid = new Color[DIM][DIM];
         application = new JFrame();
@@ -102,13 +113,16 @@ public class HeatMapTest {
         button.addActionListener(new BHandler());
         application.add(button, BorderLayout.PAGE_END);
 
-        application.setSize(DIM * 50, DIM * 50);
+        application.setSize(DIM * 25, DIM * 25);
         application.setVisible(true);
         application.repaint();
         animate();
     }
 
-
+    /**
+     * For each array in the scan results, print the grid.
+     * @throws InterruptedException
+     */
     private static void animate() throws InterruptedException {
         button.setEnabled(false);
         for (int i = 0; i < finalHeatMap.size(); i++) {
@@ -121,6 +135,11 @@ public class HeatMapTest {
         application.repaint();
     }
 
+    /**
+     * For the passed in two dimensional array, interprets the results of a
+     * reduce/scan into different colors per pixel of grid.
+     * @param grid  2D array of Color
+     */
     private static void fillGrid(Color[][] grid) {
         for (int r = 0; r < grid.length; r++) {
             for (int c = 0; c < grid[r].length; c++) {
@@ -130,6 +149,13 @@ public class HeatMapTest {
         }
     }
 
+    /**
+     * Returns a Color based on passed in number.
+     * @param ratio Some double value
+     * @param a Cold color, blue
+     * @param b Hot color, red
+     * @return a new Color based on the value
+     */
     private static Color interpolateColor(double ratio, Color a, Color b) {
         if (ratio == 4.0) {
             ratio = 1;
@@ -151,5 +177,4 @@ public class HeatMapTest {
         int cz = az + (int) ((b.getBlue() - az) * ratio);
         return new Color(cx, cy, cz);
     }
-
 }

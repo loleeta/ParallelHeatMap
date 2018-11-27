@@ -16,10 +16,13 @@ import java.io.ObjectOutputStream;
  */
 public class SomeData {
     public static void main(String[] args) {
-        uniformSpray();
-        oldUniformSpray();
+        uniformSpray(); //data for HW6
+        oldUniformSpray(); //data for HW5
     }
 
+    /**
+     * Writes to file a set of Observations consisting of time, row, col values
+     */
     public static void uniformSpray() {
         final String FILENAME = "obs_uniform_spray.dat";
         try {
@@ -55,6 +58,9 @@ public class SomeData {
         System.out.println("Wrote " + FILENAME);
     }
 
+    /**
+     * Writes to file a set of Observations consisting of time, row, col values
+     */
     public static void oldUniformSpray() {
         final String FILENAME = "obs_uniform_spray_step7.dat";
         try {
@@ -62,7 +68,7 @@ public class SomeData {
             int t = 0;
             int count = 0;
             for (double r = -0.95; r <= 0.95; r += 0.1) {
-                t++; // each row has the same value of t so we can see differences in step 7
+                t++;
                 for (double c = -0.95; c <= 0.95; c += 0.1) {
                     count++;
                     out.writeObject(new Observation(t, c, r));
